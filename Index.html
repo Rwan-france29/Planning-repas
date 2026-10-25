@@ -1,0 +1,165 @@
+<!DOCTYPE html>  <html lang="fr">  
+<head>  
+<meta charset="UTF-8">  
+<meta name="viewport" content="width=device-width, initial-scale=1">  
+<title>Mon frigo-planning</title>  
+<style>  
+:root{font-family:Arial,sans-serif;color:#28352d;background:#f7f6ef}  
+*{box-sizing:border-box}  
+body{margin:0}  
+header{background:#456b52;color:white;padding:18px}  
+header h1{margin:0 0 12px;font-size:24px}  
+button,select,input{font:inherit;padding:10px;border:1px solid #cbd5c9;border-radius:9px;background:white}  
+button{cursor:pointer}  
+header button{margin-right:6px}  
+main{display:grid;grid-template-columns:280px minmax(0,1fr);gap:18px;padding:18px;align-items:start}  
+aside,.planner{background:white;border:1px solid #e0e3d8;border-radius:14px;padding:14px}  
+h2{font-size:18px;margin:4px 0 12px}  
+h3{font-size:15px;margin:8px 0}  
+select{width:100%;margin-bottom:10px}  
+.fav{padding:10px;margin:7px 0;background:#f4f1df;border:1px solid #e7dfbc;border-radius:9px;cursor:grab}  
+.fav:active{cursor:grabbing}  
+.small{font-size:12px;color:#68746a;line-height:1.4}  
+.calendar{display:grid;grid-template-columns:repeat(7,minmax(90px,1fr));gap:6px;overflow-x:auto}  
+.weekday{font-weight:bold;text-align:center;padding:8px 2px;background:#edf1e8;border-radius:7px;font-size:13px}  
+.day{min-height:115px;border:1px solid #dfe4da;border-radius:8px;padding:7px;background:#fff;min-width:0}  
+.day.today{border:2px solid #699674}  
+.date{font-weight:bold;font-size:13px;margin-bottom:7px}  
+.meal{background:#e4efdf;padding:7px;border-radius:7px;font-size:12px;margin:5px 0;overflow-wrap:anywhere}  
+.meal button{padding:2px 5px;float:right;border:0;background:transparent}  
+.day select{font-size:12px;padding:5px}  
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}  
+.actions button{font-size:13px}  
+#status{font-size:12px;color:#456b52}  
+@media(max-width:700px){  
+ main{grid-template-columns:1fr;padding:10px;gap:10px}  
+ aside{order:0}  
+ .planner{order:1}  
+ .calendar{grid-template-columns:repeat(7,105px)}  
+ header h1{font-size:21px}  
+}  
+</style>  
+</head>  
+<body>  
+<header>  
+<h1>🥕 Mon frigo-planning</h1>  
+<button onclick="setWeeks(2)">2 semaines</button>  
+<button onclick="setWeeks(4)">4 semaines</button>  
+<div class="small" style="color:white;margin-top:8px">Planning familial des repas</div>  
+</header>  
+<main>  
+<aside>  
+<h2>🍽️ Choisir un plat</h2>  
+<select id="recipeSelect">  
+<option value="">Choisir dans la liste…</option>  
+</select>  
+<button onclick="addSelected()" style="width:100%">Ajouter au prochain jour libre</button>  
+<p class="small">Sur ordinateur, tu peux aussi glisser un plat vers un jour. Sur téléphone, sélectionne un plat puis utilise le bouton d'ajout d'un jour.</p>  
+<hr>  
+<h2>⭐ Mes 7 favoris</h2>  
+<div id="favorites"></div>  
+<p class="small">Les favoris restent visibles ici. Touchez un jour pour y ajouter un plat depuis sa liste.</p>  
+<hr>  
+<h3>Ajouter un plat à la collection</h3>  
+<input id="newRecipe" placeholder="Nom du plat" style="width:100%">  
+<button onclick="addRecipe()" style="width:100%;margin-top:7px">Enregistrer ce plat</button>  
+</aside>  
+<section class="planner">  
+<h2>📅 Calendrier des repas</h2>  
+<div class="actions">  
+<button onclick="move(-7)">← Semaine précédente</button>  
+<button onclick="goToday()">Aujourd'hui</button>  
+<button onclick="move(7)">Semaine suivante →</button>  
+</div>  
+<div id="period" class="small" style="margin-bottom:10px"></div>  
+<div id="calendar" class="calendar"></div>  
+<p id="status"></p>  
+<button onclick="clearPlan()">Effacer le planning</button>  
+</section>  
+</main>  
+<script>  
+const initial=[  
+"Lasagnes","Spaghettis bolognaise","Rougail saucisse",  
+"Poulet rôti, pommes de terre","Pâtes carbonara",  
+"Steak, purée, haricots verts","Couscous",  
+"Pâtes lardons et crème","Poulet à la crème et riz",  
+"Lentilles au jambon","Curry de porc et riz",  
+"Croque-monsieur","Pizza","Nuggets et frites",  
+"Rôti de bœuf à l'ail","Saucisses et semoule",  
+"Salade de tomates","Concombres","Carottes râpées",  
+"Gratin de pâtes","Nems et riz","Poulet et patates douces",  
+"Lapin en sauce","Samosas et salade","Pâtes jambon-crème",  
+"Poisson et légumes","Soupe de légumes et tartines",  
+"Endives au jambon","Salade du pêcheur","Restes du frigo"  
+];  
+const favNames=[  
+"Lasagnes","Spaghettis bolognaise","Rougail saucisse",  
+"Poulet rôti, pommes de terre","Pâtes carbonara",  
+"Steak, purée, haricots verts","Couscous"  
+];  
+let recipes=JSON.parse(localStorage.getItem("frigoRecipes")||"null")||initial;  
+let plan=JSON.parse(localStorage.getItem("frigoPlan")||"{}");  
+let weeks=2;  
+let start=new Date();  
+start.setDate(start.getDate()-((start.getDay()+6)%7));  
+start.setHours(0,0,0,0);  
+function save(){  
+localStorage.setItem("frigoRecipes",JSON.stringify(recipes));  
+localStorage.setItem("frigoPlan",JSON.stringify(plan));  
+document.getElementById("status").textContent="Planning enregistré sur cet appareil.";  
+}  
+function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}  
+function pretty(d){return d.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}  
+function populate(){  
+const s=document.getElementById("recipeSelect");  
+s.innerHTML='<option value="">Choisir dans la liste…</option>';  
+recipes.forEach(r=>{let o=document.createElement("option");o.value=r;o.textContent=r;s.appendChild(o)});  
+const f=document.getElementById("favorites");f.innerHTML="";  
+favNames.forEach(r=>{  
+let el=document.createElement("div");el.className="fav";el.textContent="☷ "+r;  
+el.draggable=true;el.ondragstart=e=>e.dataTransfer.setData("text/plain",r);  
+el.onclick=()=>{document.getElementById("recipeSelect").value=r;document.getElementById("recipeSelect").scrollIntoView({behavior:"smooth",block:"center"})};  
+f.appendChild(el);  
+});  
+}  
+function render(){  
+const cal=document.getElementById("calendar");cal.innerHTML="";  
+document.getElementById("period").textContent=pretty(start)+" — "+pretty(new Date(start.getTime()+(weeks*7-1)*86400000));  
+["Lun.","Mar.","Mer.","Jeu.","Ven.","Sam.","Dim."].forEach(x=>{let el=document.createElement("div");el.className="weekday";el.textContent=x;cal.appendChild(el)});  
+for(let i=0;i<weeks*7;i++){  
+let d=new Date(start.getTime()+i*86400000),key=iso(d);  
+let cell=document.createElement("div");cell.className="day";  
+if(key===iso(new Date()))cell.classList.add("today");  
+let date=document.createElement("div");date.className="date";date.textContent=pretty(d);cell.appendChild(date);  
+if(plan[key]){  
+let meal=document.createElement("div");meal.className="meal";  
+let del=document.createElement("button");del.textContent="×";del.title="Retirer ce repas";  
+del.onclick=()=>{delete plan[key];save();render()};  
+meal.appendChild(del);meal.appendChild(document.createTextNode(plan[key]));cell.appendChild(meal);  
+}  
+let sel=document.createElement("select");sel.innerHTML='<option value="">+ Ajouter un plat</option>';  
+recipes.forEach(r=>{let o=document.createElement("option");o.value=r;o.textContent=r;sel.appendChild(o)});  
+sel.onchange=()=>{if(sel.value){plan[key]=sel.value;save();render()}};  
+cell.appendChild(sel);  
+cell.ondragover=e=>e.preventDefault();  
+cell.ondrop=e=>{e.preventDefault();let r=e.dataTransfer.getData("text/plain");if(r){plan[key]=r;save();render()}};  
+cal.appendChild(cell);  
+}  
+}  
+function setWeeks(n){weeks=n;render()}  
+function move(n){start=new Date(start.getTime()+n*86400000);render()}  
+function goToday(){start=new Date();start.setDate(start.getDate()-((start.getDay()+6)%7));start.setHours(0,0,0,0);render()}  
+function addSelected(){  
+let r=document.getElementById("recipeSelect").value;if(!r){alert("Choisis d'abord un plat.");return}  
+for(let i=0;i<weeks*7;i++){let d=new Date(start.getTime()+i*86400000),key=iso(d);if(!plan[key]){plan[key]=r;save();render();return}}  
+alert("Toutes les journées affichées ont déjà un repas. Choisis un jour directement.");  
+}  
+function addRecipe(){  
+let input=document.getElementById("newRecipe"),r=input.value.trim();  
+if(r&&!recipes.includes(r)){recipes.push(r);input.value="";populate();save();render()}  
+}  
+function clearPlan(){if(confirm("Effacer tous les repas planifiés ?")){plan={};save();render()}}  
+populate();render();  
+</script>  
+</body>  
+</html>
